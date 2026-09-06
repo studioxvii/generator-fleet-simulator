@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements-dev.lock
+
+      - name: Install locked dependencies
+        run: |
+          python -m pip install --require-hashes -r requirements-dev.lock
+          python -m pip install --no-build-isolation --no-deps .
+
+      - name: Check installed dependencies
+        run: python -m pip check
+
+      - name: Check installed dashboard assets outside the source tree
+        run: |
+          python -I - <<'PYCODE'
+          from main import create_app
+          app, _, _ = create_app()
+          client = app.test_client()
+          assert client.get("/").status_code == 200
+          assert client.get("/static/vendor/socket.io.min.js").status_code == 200
+          assert client.get("/static/vendor/socket.io.LICENSE").status_code == 200
+          PYCODE
+
+      - name: Run credential guard
+        run: python tools/security/secret_guard.py --root .
+
+      - name: Compile Python sources
+        run: python -m compileall .
+
+      - name: Run tests
+        run: pytest
+
+      - name: Audit runtime lock
+        run: |
+          python -m pip install --require-hashes -r requirements-audit.lock
+          python -m pip_audit --requirement requirements.lock --progress-spinner off
+          python -m pip_audit --requirement requirements-dev.lock --progress-spinner off
+
+  docker-smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-dev.lock
+
+      - name: Install locked smoke dependencies
+        run: python -m pip install --require-hashes -r requirements.lock
+
+      - name: Build Docker image
+        run: docker build -t generator-fleet-simulator:ci-smoke .
+
+      - name: Reject high and critical container vulnerabilities
+        run: |
+          docker save generator-fleet-simulator:ci-smoke -o "$RUNNER_TEMP/gfs-image.tar"
+          docker run --rm -v "$RUNNER_TEMP:/audit" \
+            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 \
+            image --input /audit/gfs-image.tar --scanners vuln \
+            --severity HIGH,CRITICAL --exit-code 1 --timeout 10m
+
+      - name: Run Docker release smoke
+        run: |
+          docker run --rm --name gfs-ci-smoke -d \
+            -p 127.0.0.1:5110:5000 \
+            -p 127.0.0.1:5130-5137:5020-5027 \
+            generator-fleet-simulator:ci-smoke
+          trap 'docker rm -f gfs-ci-smoke' EXIT
+          python tools/release_smoke.py \
+            --base-url http://127.0.0.1:5110 \
+            --modbus-host 127.0.0.1 \
+            --modbus-port 5130 \
+            --startup-modbus-port 5020 \
+            --generators 2000 \
+            --timeout 30
+
+  windows-launcher-syntax:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Parse PowerShell launcher
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path .\start.ps1),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }

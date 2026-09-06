@@ -1,0 +1,79 @@
+# Studio Seventeen — Simulator Suite
+# Legacy suite demo. BESS and PV are external products, outside this MIT grant.
+# Review their licenses separately before setting ACCEPT_LICENSE for those images.
+# Their mutable image tags and runtime behavior have not been audited here.
+#
+# Usage:
+#   ./demo-start.sh         # recommended (handles prereqs + license)
+#   SIM_HOST_BIND=127.0.0.1 docker compose up -d
+#
+# Dashboards (once running):
+#   Generator Fleet : http://localhost:5001
+#   BESS Simulator  : http://localhost:5002
+#   PV Simulator    : http://localhost:5003
+#
+# Modbus TCP endpoints:
+#   Generator Fleet : localhost:5030-5037
+#   BESS Simulator  : localhost:5022
+#   PV Simulator    : localhost:5023
+
+services:
+  generator-fleet-sim:
+    image: studioxvii/generator-fleet-sim:${GENSIM_IMAGE_TAG:-1.1.0-rc.4}
+    ports:
+      - "${SIM_HOST_BIND:-127.0.0.1}:5001:5000"
+      - "${SIM_HOST_BIND:-127.0.0.1}:5030-5037:5020-5027"
+    environment:
+      GENSIM_STATE_FILE: /data/generator_state.json
+      GENSIM_PUBLIC_MODBUS_PORT: "5030"
+      GENSIM_TRUSTED_HOSTS: "${GENSIM_TRUSTED_HOSTS:-}"
+    volumes:
+      - generator_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/state')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+
+  bess-sim:
+    image: studioseventeen/bess-sim:latest
+    ports:
+      - "${SIM_HOST_BIND:-127.0.0.1}:5002:5000"
+      - "${SIM_HOST_BIND:-127.0.0.1}:5022:5020"
+    environment:
+      ACCEPT_LICENSE: "${ACCEPT_LICENSE:-}"
+      BESSSIM_STATE_FILE: /data/bess_state.json
+    volumes:
+      - bess_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+
+  pv-sim:
+    image: studioseventeen/pv-sim:latest
+    ports:
+      - "${SIM_HOST_BIND:-127.0.0.1}:5003:5000"
+      - "${SIM_HOST_BIND:-127.0.0.1}:5023:5020"
+    environment:
+      ACCEPT_LICENSE: "${ACCEPT_LICENSE:-}"
+      PVSIM_STATE_FILE: /data/pv_state.json
+    volumes:
+      - pv_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  generator_data:
+  bess_data:
+  pv_data:

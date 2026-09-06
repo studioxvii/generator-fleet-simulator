@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools==83.0.0", "wheel==0.47.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "generator-fleet-simulator"
+version = "1.1.0rc4"
+description = "MIT-licensed Community Edition fleet simulator for diesel standby generators with Modbus TCP, REST API, and a real-time dashboard"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "static/vendor/socket.io.LICENSE"]
+requires-python = ">=3.11"
+dependencies = [
+  "flask>=3.0,<4",
+  "flask-socketio>=5.3,<6",
+  "gunicorn>=22,<24",
+  "pymodbus>=3.6,<3.8",
+  "simple-websocket>=1.0,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0,<10",
+]
+
+[project.scripts]
+generator-fleet-sim = "main:run"

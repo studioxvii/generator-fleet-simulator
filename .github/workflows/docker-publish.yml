@@ -1,0 +1,329 @@
+name: Docker Publish
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_REPOSITORY: studioxvii/generator-fleet-sim
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Verify tag matches release version
+        run: test "v$(cat VERSION)" = "$GITHUB_REF_NAME"
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-dev.lock
+
+      - name: Install locked dependencies
+        run: |
+          python -m pip install --require-hashes -r requirements-dev.lock
+          python -m pip install --no-build-isolation --no-deps .
+
+      - name: Check installed dependencies
+        run: python -m pip check
+
+      - name: Check installed dashboard assets outside the source tree
+        run: |
+          python -I - <<'PYCODE'
+          from main import create_app
+          app, _, _ = create_app()
+          client = app.test_client()
+          assert client.get("/").status_code == 200
+          assert client.get("/static/vendor/socket.io.min.js").status_code == 200
+          assert client.get("/static/vendor/socket.io.LICENSE").status_code == 200
+          PYCODE
+
+      - name: Run credential guard
+        run: python tools/security/secret_guard.py --root .
+
+      - name: Compile Python sources
+        run: python -m compileall .
+
+      - name: Run tests
+        run: pytest
+
+      - name: Audit runtime lock
+        run: |
+          python -m pip install --require-hashes -r requirements-audit.lock
+          python -m pip_audit --requirement requirements.lock --progress-spinner off
+          python -m pip_audit --requirement requirements-dev.lock --progress-spinner off
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: verify
+    env:
+      CANDIDATE_TAG: candidate-${{ github.run_id }}-${{ github.run_attempt }}
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-dev.lock
+
+      - name: Install locked smoke dependencies
+        run: python -m pip install --require-hashes -r requirements.lock
+
+      - name: Build Docker smoke image
+        run: docker build -t generator-fleet-simulator:publish-smoke .
+
+      - name: Reject high and critical container vulnerabilities
+        run: |
+          docker save generator-fleet-simulator:publish-smoke -o "$RUNNER_TEMP/gfs-image.tar"
+          docker run --rm -v "$RUNNER_TEMP:/audit" \
+            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 \
+            image --input /audit/gfs-image.tar --scanners vuln \
+            --severity HIGH,CRITICAL --exit-code 1 --timeout 10m
+
+      - name: Run Docker release smoke
+        run: |
+          docker run --rm --name gfs-publish-smoke -d \
+            -p 127.0.0.1:5110:5000 \
+            -p 127.0.0.1:5130-5137:5020-5027 \
+            generator-fleet-simulator:publish-smoke
+          trap 'docker rm -f gfs-publish-smoke' EXIT
+          python tools/release_smoke.py \
+            --base-url http://127.0.0.1:5110 \
+            --modbus-host 127.0.0.1 \
+            --modbus-port 5130 \
+            --startup-modbus-port 5020 \
+            --generators 2000 \
+            --timeout 30
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ${{ env.IMAGE_REPOSITORY }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref_name, '-') }}
+            type=semver,pattern={{major}},enable=${{ !contains(github.ref_name, '-') }}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push release candidate
+        id: push
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE_REPOSITORY }}:${{ env.CANDIDATE_TAG }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+
+      - name: Sign image digest with GitHub OIDC
+        env:
+          IMAGE_DIGEST: ${{ steps.push.outputs.digest }}
+        run: cosign sign --yes "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}"
+
+      - name: Verify image signature
+        env:
+          IMAGE_DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          cosign verify \
+            --certificate-identity-regexp '^https://github.com/studioxvii/generator-fleet-simulator/.github/workflows/docker-publish.yml@refs/tags/v' \
+            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+            "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}"
+
+      - name: Verify anonymous image pull
+        env:
+          IMAGE_DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          ANONYMOUS_DOCKER_CONFIG="$(mktemp -d)"
+          trap 'rm -rf "$ANONYMOUS_DOCKER_CONFIG"' EXIT
+          docker image rm "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}" 2>/dev/null || true
+          DOCKER_CONFIG="$ANONYMOUS_DOCKER_CONFIG" docker pull --platform linux/amd64 "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}"
+          # Classic Docker stores one platform per digest reference at a time.
+          docker image rm "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}"
+          DOCKER_CONFIG="$ANONYMOUS_DOCKER_CONFIG" docker pull --platform linux/arm64 "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}"
+          docker image rm "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}"
+
+      - name: Smoke exact amd64 release digest
+        env:
+          IMAGE_DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          docker run --rm --platform linux/amd64 --name gfs-release-amd64 -d \
+            -p 127.0.0.1:5110:5000 \
+            -p 127.0.0.1:5130-5137:5020-5027 \
+            "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}"
+          trap 'docker rm -f gfs-release-amd64 >/dev/null 2>&1 || true' EXIT
+          python tools/release_smoke.py \
+            --base-url http://127.0.0.1:5110 \
+            --modbus-host 127.0.0.1 \
+            --modbus-port 5130 \
+            --startup-modbus-port 5020 \
+            --generators 2000 \
+            --timeout 30
+
+          docker rm -f gfs-release-amd64
+          docker image rm "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}"
+
+      - name: Smoke exact arm64 release digest under QEMU
+        env:
+          IMAGE_DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          docker run --rm --platform linux/arm64 --name gfs-release-arm64 -d \
+            -p 127.0.0.1:5111:5000 \
+            -p 127.0.0.1:5140-5147:5020-5027 \
+            "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}"
+          trap 'docker rm -f gfs-release-arm64 >/dev/null 2>&1 || true' EXIT
+          python tools/release_smoke.py \
+            --base-url http://127.0.0.1:5111 \
+            --modbus-host 127.0.0.1 \
+            --modbus-port 5140 \
+            --startup-modbus-port 5020 \
+            --generators 2000 \
+            --timeout 60
+
+      - name: Scan both exact release architectures before promotion
+        env:
+          IMAGE_DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          for arch in amd64 arm64; do
+            docker run --rm aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 \
+              image --platform "linux/$arch" --scanners vuln \
+              --severity HIGH,CRITICAL --exit-code 1 --timeout 10m \
+              "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}"
+          done
+
+      - name: Build customer launcher bundle and release receipt
+        env:
+          IMAGE_DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          RELEASE_TIME=$(git show -s --format=%cI "$GITHUB_SHA")
+          python tools/build_release_bundle.py \
+            --output-dir dist \
+            --git-sha "$GITHUB_SHA" \
+            --image-repository "$IMAGE_REPOSITORY" \
+            --image-digest "$IMAGE_DIGEST" \
+            --generated-at "$RELEASE_TIME" \
+            --workflow-run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+      - name: Generate downloadable SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ${{ env.IMAGE_REPOSITORY }}@${{ steps.push.outputs.digest }}
+          registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
+          output-file: dist/generator-fleet-simulator-community-edition-${{ github.ref_name }}-sbom.spdx.json
+          format: spdx-json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Validate release assets
+        run: |
+          (cd dist && sha256sum --check *.zip.sha256)
+          jq empty dist/*-release-receipt.json
+          jq empty dist/*-sbom.spdx.json
+
+      - name: Sign and verify release asset manifest
+        run: |
+          ASSET_PREFIX="generator-fleet-simulator-community-edition-${GITHUB_REF_NAME}"
+          (
+            cd dist
+            sha256sum *.zip *.zip.sha256 *-release-receipt.json *-sbom.spdx.json > "${ASSET_PREFIX}-SHA256SUMS"
+          )
+          cosign sign-blob --yes \
+            --bundle "dist/${ASSET_PREFIX}-SHA256SUMS.sigstore.json" \
+            "dist/${ASSET_PREFIX}-SHA256SUMS"
+          cosign verify-blob \
+            --bundle "dist/${ASSET_PREFIX}-SHA256SUMS.sigstore.json" \
+            --certificate-identity-regexp '^https://github.com/studioxvii/generator-fleet-simulator/.github/workflows/docker-publish.yml@refs/tags/v' \
+            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+            "dist/${ASSET_PREFIX}-SHA256SUMS"
+
+      - name: Upload release assets to workflow
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: generator-fleet-simulator-community-edition-${{ github.ref_name }}
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Stage draft GitHub release with validated assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_flags=(--verify-tag --title "Generator Fleet Simulator Community Edition ${GITHUB_REF_NAME}" --generate-notes --draft)
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            release_flags+=(--prerelease)
+          fi
+          if gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft > /tmp/gfs-release-is-draft 2>/dev/null; then
+            if [ "$(cat /tmp/gfs-release-is-draft)" != "true" ]; then
+              echo "A published GitHub release already exists for $GITHUB_REF_NAME" >&2
+              exit 1
+            fi
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${release_flags[@]}" dist/*
+          fi
+
+      - name: Promote validated digest to official release tags
+        env:
+          IMAGE_DIGEST: ${{ steps.push.outputs.digest }}
+          OFFICIAL_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          VERSION_IMAGE="${IMAGE_REPOSITORY}:${GITHUB_REF_NAME#v}"
+          VERSION_STATUS=$(python tools/check_release_tag.py \
+            --reference "$VERSION_IMAGE" \
+            --expected-digest "$IMAGE_DIGEST")
+          while IFS= read -r tag; do
+            if [ -n "$tag" ] && [ "$tag" != "$VERSION_IMAGE" ]; then
+              docker buildx imagetools create --tag "$tag" "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}"
+            fi
+          done <<< "$OFFICIAL_TAGS"
+          if [ "$VERSION_STATUS" = "absent" ]; then
+            docker buildx imagetools create --tag "$VERSION_IMAGE" "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}"
+          else
+            echo "Immutable version tag already matches validated digest: $VERSION_IMAGE"
+          fi
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false

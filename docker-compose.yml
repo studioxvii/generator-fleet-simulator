@@ -1,0 +1,35 @@
+# Studio Seventeen Generator Fleet Simulator
+# Community Edition Compose file for Generator Fleet only.
+#
+# Usage:
+#   ./start.sh          # macOS/Linux guided launcher
+#   ./start.ps1         # Windows PowerShell guided launcher
+#
+# Direct Compose usage is intended for automation after security review:
+#   SIM_HOST_BIND=127.0.0.1 docker compose up -d
+#
+# Ports:
+#   REST :5001  Modbus :5021-5028
+#
+# Project code uses MIT. No license acceptance variable is required.
+# Published images must be anonymously pullable.
+#
+# Ports are bound to 127.0.0.1 by default. The launcher can set
+# SIM_HOST_BIND=0.0.0.0 when a customer explicitly opts into trusted LAN
+# integration mode.
+
+services:
+  generator:
+    image: studioxvii/generator-fleet-sim:${GENSIM_IMAGE_TAG:-1.1.0-rc.4}
+    ports:
+      - "${SIM_HOST_BIND:-127.0.0.1}:5001:5000"
+      - "${SIM_HOST_BIND:-127.0.0.1}:5021-5028:5020-5027"
+    volumes:
+      - generator-data:/data
+    environment:
+      - GENSIM_PUBLIC_MODBUS_PORT=5021
+      - GENSIM_TRUSTED_HOSTS=${GENSIM_TRUSTED_HOSTS:-}
+    restart: unless-stopped
+
+volumes:
+  generator-data:

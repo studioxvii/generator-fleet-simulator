@@ -1,0 +1,33 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Packaging/build output
+build/
+dist/
+*.egg-info/
+node_modules/
+
+# Local runtime state
+generator_state.json
+generator_state.json.bak
+generator_runbooks.json
+.studioseventeen/
+.env
+.env.*
+!.env.example
+
+# Local virtual environments
+.venv/
+venv/
+
+# macOS
+.DS_Store
+
+# Private development evidence and media
+QAQC/
+.audit/
+marketing/
+docs/audit-evidence/
+*.pem
+*.key
