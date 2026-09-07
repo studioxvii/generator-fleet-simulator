@@ -11,4 +11,4 @@ not certify that a future build will pass.
 
 Native Windows Docker Desktop and the full clean-machine launcher matrix remain
 pending. Website download integration depends on a successful public release.
-See releases/v1.1.0-rc.4-acceptance.md and SECURITY.md.
+See releases/v1.1.0-rc.5-acceptance.md and SECURITY.md.

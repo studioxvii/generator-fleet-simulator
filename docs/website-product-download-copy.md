@@ -14,7 +14,7 @@ native Modbus TCP for all 2,000 generators across up to eight consecutive ports.
 
 **Free download. MIT-licensed project code.**
 
-Primary CTA: **Download Community Edition 1.1.0-rc.4**
+Primary CTA: **Download Community Edition 1.1.0-rc.5**
 
 CTA target: `[VERSIONED_ZIP_URL]`
 

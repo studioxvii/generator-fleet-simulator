@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.0-rc.5 — launcher and download fixes
 
 - Preserve Docker errors in both launchers and distinguish access denial from
   an unavailable engine.

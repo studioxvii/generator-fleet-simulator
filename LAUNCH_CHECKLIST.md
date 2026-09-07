@@ -16,7 +16,7 @@ Community Edition package.
   and `wsgi:app`, not the Flask development server.
 - Build the release image from the merged commit.
 - Tag the image with the package version, for example
-  `studioxvii/generator-fleet-sim:1.1.0-rc.4`.
+  `studioxvii/generator-fleet-sim:1.1.0-rc.5`.
 - Push the image to `studioxvii/generator-fleet-sim` on Docker Hub.
 - In Docker Hub, open the `studioxvii/generator-fleet-sim` repository,
   choose **Settings -> Visibility settings -> Public**, and confirm the change.

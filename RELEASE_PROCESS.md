@@ -49,9 +49,9 @@ Public source availability does not prove that public downloads are ready.
    ```
 
 3. Synchronize:
-   - `VERSION` as SemVer, such as `1.1.0-rc.4`;
+   - `VERSION` as SemVer, such as `1.1.0-rc.5`;
    - `pyproject.toml` and `setup.cfg` as normalized PEP 440, such as
-     `1.1.0rc4`;
+     `1.1.0rc5`;
    - `docker-compose.yml`, `start.sh`, and `start.ps1` fallbacks;
    - `CHANGELOG.md`, bundle tests, website copy, and documentation examples.
 4. If dependency inputs changed, regenerate and inspect both hashed locks:

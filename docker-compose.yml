@@ -20,7 +20,7 @@
 
 services:
   generator:
-    image: studioxvii/generator-fleet-sim:${GENSIM_IMAGE_TAG:-1.1.0-rc.4}
+    image: studioxvii/generator-fleet-sim:${GENSIM_IMAGE_TAG:-1.1.0-rc.5}
     ports:
       - "${SIM_HOST_BIND:-127.0.0.1}:5001:5000"
       - "${SIM_HOST_BIND:-127.0.0.1}:5021-5028:5020-5027"
