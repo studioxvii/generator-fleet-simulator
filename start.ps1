@@ -9,9 +9,9 @@ $SecurityReviewFile = Join-Path $StateDir "security-reviewed"
 $NetworkModeFile = Join-Path $StateDir "network-mode"
 $VersionFile = Join-Path $ScriptDir "VERSION"
 $ImageRepository = "studioxvii/generator-fleet-sim"
-$ImageTag = if (Test-Path $VersionFile) { (Get-Content $VersionFile -First 1).Trim() } else { "1.1.0-rc.4" }
+$ImageTag = if (Test-Path $VersionFile) { (Get-Content $VersionFile -First 1).Trim() } else { "1.1.0-rc.5" }
 if (-not $ImageTag) {
-    $ImageTag = "1.1.0-rc.4"
+    $ImageTag = "1.1.0-rc.5"
 }
 $FleetStartupPayload = $null
 $FleetTotal = 0

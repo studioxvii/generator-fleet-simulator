@@ -30,20 +30,20 @@ and upgrade verification.
 macOS:
 
 ```bash
-shasum -a 256 -c generator-fleet-simulator-community-edition-1.1.0-rc.4.zip.sha256
+shasum -a 256 -c generator-fleet-simulator-community-edition-1.1.0-rc.5.zip.sha256
 ```
 
 Linux:
 
 ```bash
-sha256sum -c generator-fleet-simulator-community-edition-1.1.0-rc.4.zip.sha256
+sha256sum -c generator-fleet-simulator-community-edition-1.1.0-rc.5.zip.sha256
 ```
 
 Windows PowerShell:
 
 ```powershell
-Get-FileHash .\generator-fleet-simulator-community-edition-1.1.0-rc.4.zip -Algorithm SHA256
-Get-Content .\generator-fleet-simulator-community-edition-1.1.0-rc.4.zip.sha256
+Get-FileHash .\generator-fleet-simulator-community-edition-1.1.0-rc.5.zip -Algorithm SHA256
+Get-Content .\generator-fleet-simulator-community-edition-1.1.0-rc.5.zip.sha256
 ```
 
 The computed hash must match the first value in the checksum file. Stop and

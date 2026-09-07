@@ -18,8 +18,8 @@ from tools import check_release_tag
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_RELEASE_VERSION = "1.1.0-rc.4"
-EXPECTED_PACKAGE_VERSION = "1.1.0rc4"
+EXPECTED_RELEASE_VERSION = "1.1.0-rc.5"
+EXPECTED_PACKAGE_VERSION = "1.1.0rc5"
 EXPECTED_BUNDLE_FILES = {
     "docker-compose.yml",
     "start.sh",

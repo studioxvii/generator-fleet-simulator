@@ -13,12 +13,12 @@ Docker startup bundle; this repository contains the source code.
 
 This repository is intentionally separate from the original smaller simulator so the large-fleet product can evolve independently.
 
-The public MIT preview is `1.1.0-rc.4`.
-[Download the preview](https://github.com/studioxvii/generator-fleet-simulator/releases/tag/v1.1.0-rc.4).
-Download the Community Edition ZIP and its verification files, extract the ZIP,
-and follow the launcher instructions below. GitHub and Docker Hub accounts are
-not required to download it. Native Windows Docker Desktop and full clean-machine
-launcher acceptance remain pending.
+Release candidate `1.1.0-rc.5` contains the launcher and download fixes.
+Its [release page](https://github.com/studioxvii/generator-fleet-simulator/releases/tag/v1.1.0-rc.5)
+will provide the signed Community Edition ZIP after publication checks pass.
+Extract the ZIP and follow the launcher instructions below. GitHub and Docker Hub
+accounts are not required to download a published release. Native Windows Docker
+Desktop and full clean-machine launcher acceptance remain pending.
 
 The container uses Python 3.11 on Alpine Linux, pinned by image digest. It changes
 the environment inside Docker, not your computer's operating system.
@@ -464,8 +464,8 @@ This repository is the home of the scaled 2,000-generator simulator. The origina
 ## Release readiness
 
 See [release readiness](https://github.com/studioxvii/generator-fleet-simulator/blob/main/docs/security-readiness-audit.md) and the
-[preview acceptance record](https://github.com/studioxvii/generator-fleet-simulator/blob/main/docs/releases/v1.1.0-rc.4-acceptance.md).
-Public source and signed preview downloads are available.
+[preview acceptance record](https://github.com/studioxvii/generator-fleet-simulator/blob/main/docs/releases/v1.1.0-rc.5-acceptance.md).
+See the release page for publication status and signed preview downloads.
 
 Host validation accepts literal IP addresses and configured web host names.
 Set `GENSIM_TRUSTED_HOSTS` to a comma-separated list of other exact DNS names
