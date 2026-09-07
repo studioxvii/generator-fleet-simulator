@@ -130,3 +130,11 @@ jobs:
             $errors | ForEach-Object { Write-Error $_.Message }
             exit 1
           }
+
+      - name: Test PowerShell 7 Docker diagnostics
+        shell: pwsh
+        run: ./tests/powershell_launcher_diagnostics.ps1
+
+      - name: Test Windows PowerShell Docker diagnostics
+        shell: powershell
+        run: ./tests/powershell_launcher_diagnostics.ps1

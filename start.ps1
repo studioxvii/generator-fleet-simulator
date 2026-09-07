@@ -16,6 +16,7 @@ if (-not $ImageTag) {
 $FleetStartupPayload = $null
 $FleetTotal = 0
 $FleetConfigDescription = "Configure later in browser"
+$script:DockerCheckError = ""
 
 function Confirm-ReleaseIntegrity {
     $ReceiptPath = Join-Path $ScriptDir "RELEASE_RECEIPT.json"
@@ -123,17 +124,28 @@ function Test-GeneratorImageAvailable {
 }
 
 function Test-DockerEngineReady {
-    $Job = Start-Job -ScriptBlock { docker info *> $null; $LASTEXITCODE }
+    $script:DockerCheckError = ""
+    $Job = Start-Job -ScriptBlock {
+        $ErrorActionPreference = "Continue"
+        $Detail = & docker info 2>&1 | Out-String
+        [PSCustomObject]@{ ExitCode = $LASTEXITCODE; Detail = $Detail.Trim() }
+    }
     $Completed = Wait-Job $Job -Timeout 20
     if (-not $Completed) {
         Stop-Job $Job -ErrorAction SilentlyContinue | Out-Null
         Remove-Job $Job -Force -ErrorAction SilentlyContinue
+        $script:DockerCheckError = "Docker did not respond within 20 seconds."
         return $false
     }
 
-    $ExitCode = Receive-Job $Job -ErrorAction SilentlyContinue
+    $Result = Receive-Job $Job -ErrorAction SilentlyContinue
     Remove-Job $Job -Force -ErrorAction SilentlyContinue
-    return $ExitCode -eq 0
+    if ($null -eq $Result) {
+        $script:DockerCheckError = "Docker check failed without a response. Run docker info in this terminal."
+        return $false
+    }
+    $script:DockerCheckError = $Result.Detail
+    return $Result.ExitCode -eq 0
 }
 
 function Show-DockerInstallHelp {
@@ -171,10 +183,15 @@ function Ensure-DockerInstalled {
 function Ensure-DockerRunning {
     while (-not (Test-DockerEngineReady)) {
         Write-Host ""
-        Write-Host "Docker is installed, but the Docker daemon is not running."
-        Write-Host "First launch can take a few minutes. If Docker Desktop stays on"
-        Write-Host '"Starting the Docker Engine" for more than 5-10 minutes, quit and reopen it.'
-        Write-Host "Start Docker Desktop, then return here."
+        Write-Host "Cannot access the Docker engine."
+        Write-Host $script:DockerCheckError
+        if ($script:DockerCheckError -match "permission denied|access is denied") {
+            Write-Host "This account does not have permission to access Docker."
+            Write-Host "See INSTALL.md, Docker access denied. Resolve access for this account, then retry."
+        } else {
+            Write-Host "Start Docker Desktop or the Docker daemon if stopped. If it is already running,"
+            Write-Host "check docker context show and docker info in this terminal."
+        }
         $Response = Read-Host "Type quit to exit, or press Enter to check again"
         if ($Response -eq "quit") {
             exit 0

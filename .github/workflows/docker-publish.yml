@@ -289,7 +289,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          release_flags=(--verify-tag --title "Generator Fleet Simulator Community Edition ${GITHUB_REF_NAME}" --generate-notes --draft)
+          sed "s/{{VERSION}}/${GITHUB_REF_NAME#v}/g" docs/releases/RELEASE_NOTES_TEMPLATE.md > "$RUNNER_TEMP/gfs-release-notes.md"
+          release_flags=(--verify-tag --title "Generator Fleet Simulator Community Edition ${GITHUB_REF_NAME}" --notes-file "$RUNNER_TEMP/gfs-release-notes.md" --generate-notes --draft)
           if [[ "$GITHUB_REF_NAME" == *-* ]]; then
             release_flags+=(--prerelease)
           fi

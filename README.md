@@ -23,7 +23,7 @@ launcher acceptance remain pending.
 The container uses Python 3.11 on Alpine Linux, pinned by image digest. It changes
 the environment inside Docker, not your computer's operating system.
 Run this simulator only locally or on an isolated LAN. See
-[release readiness](docs/security-readiness-audit.md) for current limits.
+[release readiness](https://github.com/studioxvii/generator-fleet-simulator/blob/main/docs/security-readiness-audit.md) for current limits.
 
 ## What This Simulator Does
 
@@ -105,7 +105,7 @@ runbook, or Modbus command from the dashboard or SCADA tab.
 
 See [CUSTOMER_ONBOARDING.md](CUSTOMER_ONBOARDING.md) for the full first-run
 flow and [WEBSITE_STARTUP_INSTRUCTIONS.md](WEBSITE_STARTUP_INSTRUCTIONS.md) for
-website startup copy. Use [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md)
+website startup copy. Use [LAUNCH_CHECKLIST.md](https://github.com/studioxvii/generator-fleet-simulator/blob/main/LAUNCH_CHECKLIST.md)
 before publishing a Community Edition release.
 
 ### Local development install and run
@@ -159,6 +159,8 @@ The Community Edition launcher starts Generator Fleet Simulator only.
 ### System requirements
 
 - [Docker Desktop](https://docs.docker.com/get-docker/) (includes Docker Compose)
+- macOS/Linux launcher: Bash, Python 3 (`python3`), and `curl`; Windows: PowerShell
+- Docker access for the current account (`docker info` must succeed)
 - Internet access to pull images from Docker Hub on first run
 - A 64-bit `amd64` or `arm64` host supported by Docker
 - Available local host ports `5001` and `5021–5028`, or alternate port mappings
@@ -461,8 +463,8 @@ This repository is the home of the scaled 2,000-generator simulator. The origina
 
 ## Release readiness
 
-See [release readiness](docs/security-readiness-audit.md) and the
-[preview acceptance record](docs/releases/v1.1.0-rc.4-acceptance.md).
+See [release readiness](https://github.com/studioxvii/generator-fleet-simulator/blob/main/docs/security-readiness-audit.md) and the
+[preview acceptance record](https://github.com/studioxvii/generator-fleet-simulator/blob/main/docs/releases/v1.1.0-rc.4-acceptance.md).
 Public source and signed preview downloads are available.
 
 Host validation accepts literal IP addresses and configured web host names.

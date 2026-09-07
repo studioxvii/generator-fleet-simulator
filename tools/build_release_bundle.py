@@ -31,6 +31,7 @@ PACKAGE_FILES = (
     "WEBSITE_STARTUP_INSTRUCTIONS.md",
     "INSTALL.md",
     "OPERATIONS.md",
+    "MODBUS_REFERENCE.md",
     "README.md",
     "CHANGELOG.md",
 )

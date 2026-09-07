@@ -19,6 +19,8 @@ Have these ready:
 - The matching `.zip.sha256` checksum and release receipt
 - Docker Desktop
 - A terminal on macOS/Linux or PowerShell on Windows
+- On macOS/Linux: Bash, Python 3 (`python3`), and `curl`
+- Docker access for your account: `docker info` must succeed in that terminal
 
 If Docker Desktop is not installed yet, the startup script will show the install
 options and pause until Docker is ready.

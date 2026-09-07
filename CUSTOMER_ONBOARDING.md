@@ -20,6 +20,11 @@ and contact Studio Seventeen before starting Docker.
 
 ## First Run
 
+Docker must be accessible to your account: run `docker info` in the same terminal
+and resolve any errors first. On macOS/Linux, the launcher also requires Bash,
+Python 3 (`python3`), and `curl`. Windows uses PowerShell and does not require
+host Python or curl. See `INSTALL.md` for prerequisites and troubleshooting.
+
 ### macOS or Linux
 
 ```bash
