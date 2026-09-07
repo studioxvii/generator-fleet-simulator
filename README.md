@@ -13,11 +13,11 @@ Docker startup bundle; this repository contains the source code.
 
 This repository is intentionally separate from the original smaller simulator so the large-fleet product can evolve independently.
 
-The next preview is `1.1.0-rc.4`. This public repository starts with a reviewed
-MIT source snapshot. A signed launcher download is pending publication from this
-repository. Until then, use the local development instructions below.
-Check the [releases page](https://github.com/studioxvii/generator-fleet-simulator/releases)
-for published downloads. Native Windows Docker Desktop and full clean-machine
+The public MIT preview is `1.1.0-rc.4`.
+[Download the preview](https://github.com/studioxvii/generator-fleet-simulator/releases/tag/v1.1.0-rc.4).
+Download the Community Edition ZIP and its verification files, extract the ZIP,
+and follow the launcher instructions below. GitHub and Docker Hub accounts are
+not required to download it. Native Windows Docker Desktop and full clean-machine
 launcher acceptance remain pending.
 
 The container uses Python 3.11 on Alpine Linux, pinned by image digest. It changes
@@ -463,7 +463,7 @@ This repository is the home of the scaled 2,000-generator simulator. The origina
 
 See [release readiness](docs/security-readiness-audit.md) and the
 [preview acceptance record](docs/releases/v1.1.0-rc.4-acceptance.md).
-Public source is available. Signed preview downloads remain pending publication.
+Public source and signed preview downloads are available.
 
 Host validation accepts literal IP addresses and configured web host names.
 Set `GENSIM_TRUSTED_HOSTS` to a comma-separated list of other exact DNS names
