@@ -116,7 +116,7 @@ a customer entitlement problem.
 - `VERSION`
 - `LICENSE`, `THIRD_PARTY_NOTICES.md`, `static/vendor/socket.io.LICENSE`, and `SECURITY.md`
 - `CUSTOMER_ONBOARDING.md`, `WEBSITE_STARTUP_INSTRUCTIONS.md`, `INSTALL.md`,
-  `OPERATIONS.md`, `README.md`, and `CHANGELOG.md`
+  `OPERATIONS.md`, `MODBUS_REFERENCE.md`, `README.md`, and `CHANGELOG.md`
 - `RELEASE_RECEIPT.json`
 
 It does not contain Python, JavaScript, templates, tests, Git history, or other
@@ -155,6 +155,12 @@ cosign verify-blob \
 ```
 
 ## Clean-Machine Acceptance
+
+The workflow renders `docs/releases/RELEASE_NOTES_TEMPLATE.md` with the tagged
+version and places its download, checksum, and startup instructions before the
+generated changelog. Keep that template's host prerequisites synchronized with
+`INSTALL.md`. Deliver launcher fixes through a new version and signed bundle;
+do not replace artifacts on an existing published release.
 
 Test the exact downloaded ZIP, with no cached image and an empty/signed-out
 Docker configuration, on:

@@ -31,6 +31,8 @@ environment.
 
 - Docker Engine 24+ or Docker Desktop 4.28+
 - Docker Compose v2 (comes bundled with Docker Desktop)
+- macOS/Linux launcher: Bash, Python 3 (`python3`), and `curl`; Windows: PowerShell
+- Docker access for the current account (`docker info` must succeed)
 - Internet access for the first anonymous pull from public Docker Hub
 - Ports available on the host: see [Configuration Reference](#configuration-reference)
 

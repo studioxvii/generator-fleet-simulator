@@ -15,6 +15,7 @@ IMAGE_TAG="${IMAGE_TAG:-1.1.0-rc.4}"
 FLEET_STARTUP_PAYLOAD=""
 FLEET_TOTAL=0
 FLEET_CONFIG_DESCRIPTION="Configure later in browser"
+DOCKER_CHECK_ERROR=""
 
 print_header() {
   printf "\n"
@@ -77,6 +78,22 @@ compose() {
   docker compose --file "$COMPOSE_FILE" "$@"
 }
 
+check_launcher_prerequisites() {
+  local missing=0
+  if [ -f "$SCRIPT_DIR/RELEASE_RECEIPT.json" ] && ! command -v python3 >/dev/null 2>&1; then
+    printf "Python 3 is required on this computer to verify the release receipt. Install python3 before running setup.\n" >&2
+    missing=1
+  fi
+  if ! command -v curl >/dev/null 2>&1; then
+    printf "curl is required on this computer to configure the fleet and check readiness. Install curl before running setup.\n" >&2
+    missing=1
+  fi
+  if [ "$missing" -ne 0 ]; then
+    printf "See INSTALL.md, Prerequisites. No container has been started.\n" >&2
+    return 1
+  fi
+}
+
 verify_release_integrity() {
   local receipt="$SCRIPT_DIR/RELEASE_RECEIPT.json"
   if [ ! -f "$receipt" ]; then
@@ -127,7 +144,10 @@ generator_image_available() {
 }
 
 docker_engine_ready() {
-  docker info >/dev/null 2>&1 &
+  local error_file
+  error_file="$(mktemp "${TMPDIR:-/tmp}/generator-docker-check.XXXXXX")"
+  DOCKER_CHECK_ERROR=""
+  docker info >/dev/null 2>"$error_file" &
   local pid=$!
   local waited=0
 
@@ -135,13 +155,19 @@ docker_engine_ready() {
     if [ "$waited" -ge 20 ]; then
       kill "$pid" >/dev/null 2>&1 || true
       wait "$pid" >/dev/null 2>&1 || true
+      DOCKER_CHECK_ERROR="Docker did not respond within 20 seconds."
+      rm -f "$error_file"
       return 1
     fi
     sleep 1
     waited=$((waited + 1))
   done
 
-  wait "$pid" >/dev/null 2>&1
+  local status=0
+  wait "$pid" >/dev/null 2>&1 || status=$?
+  DOCKER_CHECK_ERROR="$(cat "$error_file")"
+  rm -f "$error_file"
+  return "$status"
 }
 
 show_docker_install_help() {
@@ -198,9 +224,19 @@ ensure_docker_installed() {
 
 ensure_docker_running() {
   while ! docker_engine_ready; do
-    printf "\nDocker is installed, but the Docker daemon is not running.\n"
-    printf "First launch can take a few minutes. If Docker Desktop stays on\n"
-    printf "\"Starting the Docker Engine\" for more than 5-10 minutes, quit and reopen it.\n"
+    printf "\nCannot access the Docker engine.\n%s\n" "$DOCKER_CHECK_ERROR"
+    case "$DOCKER_CHECK_ERROR" in
+      *[Pp]ermission\ denied*|*[Aa]ccess\ is\ denied*)
+        printf "This account does not have permission to access Docker.\n"
+        printf "See INSTALL.md, Docker access denied. Resolve access for this account, then retry.\n"
+        printf "Type quit to exit, or press Enter to check again: "
+        IFS= read -r response
+        if [ "$response" = "quit" ]; then exit 0; fi
+        continue
+        ;;
+    esac
+    printf "Start Docker Desktop or the Docker daemon if stopped. If it is already running,\n"
+    printf "check docker context show and docker info in this terminal.\n"
     case "$(uname -s 2>/dev/null || printf unknown)" in
       Darwin)
         printf "Type open to launch Docker Desktop, quit to exit, or press Enter to check again: "
@@ -514,6 +550,7 @@ step_launch() {
 
 guided_setup() {
   print_header
+  check_launcher_prerequisites
   verify_release_integrity
   step_docker
   step_license

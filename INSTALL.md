@@ -9,7 +9,17 @@ This guide covers two deployment modes:
 
 - [Docker](https://docs.docker.com/get-docker/) 24+ (includes Compose v2)
 - Internet access for the first anonymous pull from public Docker Hub
+- macOS/Linux launcher: Bash, Python 3 (`python3`), and `curl` available in the terminal
+- Windows launcher: PowerShell; host Python and curl are not required
 - License: MIT. No startup acceptance variable is required.
+
+On macOS/Linux, check `python3 --version` and `curl --version` before setup.
+Install missing tools using your operating system's package manager or the
+Python installer. Python verifies the release receipt; curl configures the
+fleet and checks readiness. The simulator itself runs inside Docker.
+
+Run `docker info` in the same terminal you will use for setup. It must succeed
+for your account; see **Docker access denied** below if it reports a permission error.
 
 The Studio Seventeen delivery includes a launcher ZIP, a `.zip.sha256` file,
 an SPDX JSON SBOM, and a release receipt. Keep these files together for support
@@ -162,8 +172,23 @@ the package's release receipt before restarting.
 
 ## Troubleshooting
 
+**Docker access denied**
+Run `docker info` to see Docker's complete error. On Linux, ask your Docker
+administrator to grant your account access using Docker's supported group or
+rootless setup. If group membership was just changed, sign out and back in
+before retrying. On Windows, check that your account has permission to use
+Docker Desktop. Retry `docker info` successfully before restarting the launcher.
+Restarting Docker alone does not resolve account permission errors.
+
+**Docker is unavailable**
+Start Docker Desktop or the Docker daemon. If it is already running, inspect
+`docker context show` and `docker context ls` and select the intended context.
+Use the error from `docker info` to resolve endpoint or connection problems.
+
 **Container exits immediately**
-Read `docker logs generator-sim` and check the configured ports and volume permissions.
+Run `docker compose logs --tail=100 generator` from the extracted bundle folder
+and check the configured ports and volume permissions. For the Direct Docker
+example above, use `docker logs generator`.
 
 **Port already in use**
 Change the host-side port mapping. For example, `-p 6001:5000` exposes the REST API on port 6001 instead of 5000.

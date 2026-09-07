@@ -33,6 +33,7 @@ EXPECTED_BUNDLE_FILES = {
     "WEBSITE_STARTUP_INSTRUCTIONS.md",
     "INSTALL.md",
     "OPERATIONS.md",
+    "MODBUS_REFERENCE.md",
     "README.md",
     "CHANGELOG.md",
     "RELEASE_RECEIPT.json",
@@ -215,7 +216,8 @@ def _write_executable(path: Path, content: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
-def _run_bash_launcher(tmp_path: Path, *, mode: str, input_text: str) -> subprocess.CompletedProcess[str]:
+def _run_bash_launcher(tmp_path: Path, *, mode: str, input_text: str,
+                       missing_tools: tuple[str, ...] = ()) -> subprocess.CompletedProcess[str]:
     for relative_path in ("start.sh", "docker-compose.yml", "VERSION", "LICENSE", "SECURITY.md"):
         shutil.copy2(ROOT / relative_path, tmp_path / relative_path)
 
@@ -226,7 +228,17 @@ def _run_bash_launcher(tmp_path: Path, *, mode: str, input_text: str) -> subproc
         fake_bin / "docker",
         """#!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FAKE_DOCKER_LOG"
-if [ "$1" = "info" ]; then exit 0; fi
+if [ "$1" = "info" ]; then
+  if [ "$FAKE_DOCKER_MODE" = "permission-denied" ]; then
+    printf 'permission denied while connecting to unix:///var/run/docker.sock\n' >&2
+    exit 1
+  fi
+  if [ "$FAKE_DOCKER_MODE" = "engine-unavailable" ]; then
+    printf 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock\n' >&2
+    exit 1
+  fi
+  exit 0
+fi
 if [ "$1" = "compose" ] && [[ "$*" == *" version" ]]; then exit 0; fi
 if [ "$1" = "compose" ] && [[ "$*" == *" config --images" ]]; then
   if [ "$FAKE_DOCKER_MODE" = "reference-error" ]; then exit 1; fi
@@ -247,16 +259,25 @@ exit 0
     )
     _write_executable(fake_bin / "curl", "#!/usr/bin/env bash\nexit 0\n")
 
+    if missing_tools:
+        # Keep only declared test tools on PATH so the host installation cannot
+        # accidentally satisfy a prerequisite that this case intentionally omits.
+        for command in ("bash", "dirname", "sed", "python3", "cat", "rm", "mktemp", "sleep", "uname"):
+            if command not in missing_tools:
+                (fake_bin / command).symlink_to(shutil.which(command))
+        for command in missing_tools:
+            (fake_bin / command).unlink(missing_ok=True)
+
     env = os.environ.copy()
     env.update(
         {
-            "PATH": f"{fake_bin}:{env['PATH']}",
+            "PATH": str(fake_bin) if missing_tools else f"{fake_bin}:{env['PATH']}",
             "FAKE_DOCKER_LOG": str(docker_log),
             "FAKE_DOCKER_MODE": mode,
         }
     )
     return subprocess.run(
-        ["bash", str(tmp_path / "start.sh")],
+        [shutil.which("bash"), str(tmp_path / "start.sh")],
         input=input_text,
         text=True,
         capture_output=True,
@@ -276,6 +297,51 @@ def test_bash_launcher_pull_success_reaches_dashboard(tmp_path):
     assert result.returncode == 0, result.stderr
     assert "Generator Fleet Simulator is ready" in result.stdout
     assert "up -d generator" in (tmp_path / "docker.log").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("mode,expected", [
+    ("permission-denied", "This account does not have permission to access Docker."),
+    ("engine-unavailable", "Cannot connect to the Docker daemon at unix:///var/run/docker.sock"),
+])
+def test_bash_launcher_preserves_docker_failure_and_exits_cleanly(tmp_path, mode, expected):
+    result = _run_bash_launcher(tmp_path, mode=mode, input_text="1\nquit\n")
+    assert result.returncode == 0, result.stderr
+    assert expected in result.stdout
+    assert "Docker daemon is not running" not in result.stdout
+    if mode == "permission-denied":
+        assert "permission denied while connecting" in result.stdout
+        assert "Docker access denied" in result.stdout
+        assert "Start Docker Desktop" not in result.stdout
+    assert "up -d generator" not in (tmp_path / "docker.log").read_text()
+
+
+@pytest.mark.parametrize("missing,expected", [
+    (("python3",), "Python 3 is required"),
+    (("curl",), "curl is required"),
+    (("python3", "curl"), "Python 3 is required"),
+])
+def test_bash_launcher_checks_host_tools_before_docker(tmp_path, missing, expected):
+    (tmp_path / "RELEASE_RECEIPT.json").write_text("{}")
+    result = _run_bash_launcher(tmp_path, mode="pull-success", input_text="1\n", missing_tools=missing)
+    assert result.returncode != 0
+    assert expected in result.stderr
+    assert "See INSTALL.md, Prerequisites" in result.stderr
+    assert not (tmp_path / "docker.log").exists()
+
+
+def test_generated_release_instructions_match_bundle_names():
+    version = EXPECTED_RELEASE_VERSION
+    template = (ROOT / "docs/releases/RELEASE_NOTES_TEMPLATE.md").read_text()
+    rendered = template.replace("{{VERSION}}", version)
+    assert "{{VERSION}}" not in rendered
+    zip_name = f"generator-fleet-simulator-community-edition-{version}.zip"
+    assert f"sha256sum -c {zip_name}.sha256" in rendered
+    assert f"shasum -a 256 -c {zip_name}.sha256" in rendered
+    assert f"/releases/download/v{version}/{zip_name}" in rendered
+    assert 'throw "Checksum mismatch' in rendered
+    workflow = (ROOT / ".github/workflows/docker-publish.yml").read_text()
+    assert 'docs/releases/RELEASE_NOTES_TEMPLATE.md > "$RUNNER_TEMP/gfs-release-notes.md"' in workflow
+    assert '--notes-file "$RUNNER_TEMP/gfs-release-notes.md"' in workflow
 
 
 def test_bash_launcher_uses_exact_cached_image_after_pull_failure(tmp_path):
@@ -397,6 +463,17 @@ def test_release_bundle_contains_receipt_and_matching_checksum(tmp_path):
             assert stat.S_IFMT(member_mode) == stat.S_IFREG
         assert (bundle.getinfo(prefix + "start.sh").external_attr >> 16) & 0o111
         assert not ((bundle.getinfo(prefix + "README.md").external_attr >> 16) & 0o111)
+        assert "255" in bundle.read(prefix + "MODBUS_REFERENCE.md").decode("utf-8")
+        # A downloaded ZIP must not direct customers to absent local Markdown
+        # files. Maintainer-only references may link to the public repository.
+        for member in members:
+            if not member.endswith(".md"):
+                continue
+            for target in re.findall(r"\]\(([^)]+)\)", bundle.read(member).decode("utf-8")):
+                if re.match(r"https?://|mailto:|#", target):
+                    continue
+                local = (Path(member).parent / target.split("#")[0]).as_posix()
+                assert local in members, (member, target)
 
     assert artifacts.archive.name == f"generator-fleet-simulator-community-edition-{EXPECTED_RELEASE_VERSION}.zip"
 
